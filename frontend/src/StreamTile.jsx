@@ -3,7 +3,7 @@
  * and a strip showing the outcome of each analyzed clip.
  */
 import { useEffect, useState } from 'react'
-import { CATEGORY_LABELS, fmtDollars, fmtDuration, sourceLabel } from './format.js'
+import { CATEGORY_LABELS, fmtDollars, fmtDuration, fmtScore, moodClass, sourceLabel } from './format.js'
 import ChatPanel from './ChatPanel.jsx'
 import StreamPreview from './StreamPreview.jsx'
 import ThankYouAlert from './ThankYouAlert.jsx'
@@ -61,6 +61,14 @@ export default function StreamTile({ session, localStream, mirrored, chunks, fla
           {session.sponsor_brand && (
             <span title={`${session.sponsor_weighted_seconds ?? 0}s prominence-weighted`}>
               {session.sponsor_brand} on screen <b>{fmtDuration(session.sponsor_screen_seconds || 0)}</b>
+            </span>
+          )}
+          {session.avg_streamer_sentiment != null && (
+            <span title="Average Gemini sentiment across paid tips (-1 to +1)">
+              mood: streamer <b className={moodClass(session.avg_streamer_sentiment)}>{fmtScore(session.avg_streamer_sentiment)}</b>
+              {session.avg_chat_sentiment != null && (
+                <> · chat <b className={moodClass(session.avg_chat_sentiment)}>{fmtScore(session.avg_chat_sentiment)}</b></>
+              )}
             </span>
           )}
           {session.competitor_mentions > 0 && (

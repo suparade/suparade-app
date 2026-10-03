@@ -4,6 +4,7 @@
  */
 import { CATEGORY_LABELS, STATUS_LABELS, SUBJECT_LABELS, fmtDollars, fmtTime, reasonLabel, tipLabel } from './format.js'
 import BoxedThumb from './BoxedThumb.jsx'
+import SentimentPanel from './SentimentPanel.jsx'
 
 export default function FlagFeed({ flags, filterName, onClearFilter }) {
   return (
@@ -59,6 +60,7 @@ export default function FlagFeed({ flags, filterName, onClearFilter }) {
                       )}
                     </div>
                   )}
+                  <SentimentPanel analysis={e.sentiment_analysis} />
                   {e.alert_message && (
                     <div className="alert-line">
                       <button className="small-btn" onClick={(ev) => { ev.stopPropagation(); new Audio(e.alert_audio_url).play() }}

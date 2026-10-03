@@ -38,6 +38,16 @@ export function reasonLabel(r) {
   return r.replaceAll('_', ' ')
 }
 
+export function fmtScore(score) {
+  if (score == null) return '–'
+  return `${score > 0 ? '+' : ''}${score.toFixed(2)}`
+}
+
+export function moodClass(score) {
+  if (score == null) return ''
+  return score >= 0.3 ? 'mood-pos' : score <= -0.3 ? 'mood-neg' : 'mood-neutral'
+}
+
 export function fmtDuration(s) {
   const total = Math.round(s)
   const m = Math.floor(total / 60)

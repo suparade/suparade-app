@@ -33,8 +33,10 @@ def _dollars(cents: int) -> str:
 
 
 async def write_message(event: BeverageEvent) -> str:
+    mood = event.sentiment_analysis.streamer.summary if event.sentiment_analysis else "unknown"
     facts = (f"Amount: {_dollars(event.suggested_tip_cents)}\nWhat happened: {event.description}\n"
-             f"Quote: {event.quote or 'none'}\nChat reaction: {event.reaction_summary or 'unknown'}")
+             f"Quote: {event.quote or 'none'}\nChat reaction: {event.reaction_summary or 'unknown'}\n"
+             f"Streamer mood: {mood}")
     resp = await client().aio.models.generate_content(
         model=config.GEMINI_TEXT_MODEL,
         contents=facts,

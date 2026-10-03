@@ -16,8 +16,9 @@ Per clip:
 
 Live chat (Twitch, a demo script, or manual posts) is sent with each clip, and
 the verifier waits CHAT_REACTION_SECONDS after a moment so it can score how
-chat reacted. Paid events are then enriched in the background with product
-bounding boxes and, for demo sessions, a spoken thank-you alert and card.
+chat reacted. Paid events are then enriched in the background with streamer
+and chat sentiment, product bounding boxes and, for demo sessions, a spoken
+thank-you alert and card.
 
 Paying: a confirmed tip goes to the payments API (app/ in this repo), which
 logs it in Supabase, checks the campaign budget and sends a Stripe transfer to
@@ -43,6 +44,7 @@ from .models import BeverageEvent, ChunkStatus, ClipAnalysis, EventCategory, Mom
 from .sources import Chunk
 from .sources.browser_source import BrowserSource
 from .sources.url_source import UrlSource
+from .sentiment import analyze_tip
 from .verifier import verify_moment
 
 log = logging.getLogger("session")
@@ -67,6 +69,8 @@ class Session:
     safety_counts: dict = field(default_factory=dict)
     competitor_mentions: int = 0
     tips_cents: int = 0
+    streamer_scores: list = field(default_factory=list)  # sentiment scores of paid tips
+    chat_scores: list = field(default_factory=list)
     chunks_analyzed: int = 0
     chunks_skipped: int = 0
     events_detected: int = 0
@@ -97,7 +101,13 @@ class Session:
             "chat_feeds": self.chat_feeds,
             "chat_messages": len(self.chat.messages) if self.chat else 0,
             "local_file": bool(self.url and Path(self.url).is_file()),
+            "avg_streamer_sentiment": _avg(self.streamer_scores),
+            "avg_chat_sentiment": _avg(self.chat_scores),
         }
+
+
+def _avg(scores: list) -> Optional[float]:
+    return round(sum(scores) / len(scores), 2) if scores else None
 
 
 def _canonical_brand(name: str) -> str:
@@ -383,16 +393,39 @@ class SessionManager:
         await sink.emit_tip(event)
         await self._publish(event)
         await sink.broadcast({"type": "session", "data": s.summary()})
-        self._spawn(s, self._enrich(s, event))
+        self._spawn(s, self._enrich(s, chunk, event, offset_in_clip))
 
-    async def _enrich(self, s: Session, event: BeverageEvent) -> None:
+    async def _boxes(self, event: BeverageEvent) -> None:
+        try:
+            event.boxes = await detect_boxes(event.thumbnail_url, config.SPONSOR_BRAND)
+            await self._publish(event)
+        except Exception:
+            log.exception("box detection failed for %s", event.event_id)
+
+    async def _sentiment(self, s: Session, chunk: Chunk, event: BeverageEvent, offset_in_clip: float) -> None:
+        moment_wall = chunk.wall_end - config.CHUNK_SECONDS + max(0.0, offset_in_clip)
+        chat = None
+        if s.chat and s.chat.messages:
+            msgs = s.chat.window(moment_wall - config.CHAT_CONTEXT_SECONDS, time.time())
+            if msgs:
+                chat = format_chat(msgs, moment_wall, "around the tipped moment")
+        try:
+            event.sentiment_analysis = await analyze_tip(event, chunk.data, chunk.mime_type, chat)
+        except Exception:
+            log.exception("sentiment analysis failed for %s", event.event_id)
+            return
+        s.streamer_scores.append(event.sentiment_analysis.streamer.score)
+        if event.sentiment_analysis.chat:
+            s.chat_scores.append(event.sentiment_analysis.chat.score)
+        await self._publish(event)
+        await sink.broadcast({"type": "session", "data": s.summary()})
+
+    async def _enrich(self, s: Session, chunk: Chunk, event: BeverageEvent, offset_in_clip: float) -> None:
         """Multimodal follow-ups on a paid event; each step re-publishes the event."""
+        steps = [self._sentiment(s, chunk, event, offset_in_clip)]
         if config.BOXES_ENABLED and event.thumbnail_url:
-            try:
-                event.boxes = await detect_boxes(event.thumbnail_url, config.SPONSOR_BRAND)
-                await self._publish(event)
-            except Exception:
-                log.exception("box detection failed for %s", event.event_id)
+            steps.append(self._boxes(event))
+        await asyncio.gather(*steps)
 
         if not s.demo_alerts or event.category == EventCategory.sponsor_screen_time:
             return

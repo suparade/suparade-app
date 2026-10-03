@@ -111,6 +111,36 @@ class Verification(BaseModel):
     chat_highlights: list[str] = Field(description="Up to 3 chat messages that best show the reaction")
 
 
+class Mood(str, Enum):
+    positive = "positive"
+    neutral = "neutral"
+    negative = "negative"
+    mixed = "mixed"
+
+
+class StreamerSentiment(BaseModel):
+    label: Mood
+    score: float = Field(description="-1.0 (very negative) to 1.0 (very positive)")
+    emotions: list[str] = Field(description="Up to 3 emotions shown, e.g. excited, relaxed, annoyed")
+    tone_of_voice: str = Field(description="Short description of how the streamer sounds")
+    facial_expression: str = Field(description="Short description of the streamer's face, or 'not visible'")
+    brand_attitude: Mood = Field(description="Streamer's attitude toward the sponsor brand specifically")
+    summary: str = Field(description="One sentence")
+
+
+class ChatSentiment(BaseModel):
+    label: Mood
+    score: float = Field(description="-1.0 (very negative) to 1.0 (very positive)")
+    positive_share: float = Field(description="Fraction of messages that are positive, 0.0 to 1.0")
+    themes: list[str] = Field(description="Up to 3 short themes in chat, e.g. 'hydration jokes', 'W spam'")
+    summary: str = Field(description="One sentence")
+
+
+class TipSentiment(BaseModel):
+    streamer: StreamerSentiment
+    chat: Optional[ChatSentiment] = Field(default=None, description="Null if no chat messages were provided")
+
+
 class Box(BaseModel):
     label: str
     box_2d: list[int] = Field(description="[ymin, xmin, ymax, xmax], normalized to 0-1000")
@@ -156,6 +186,7 @@ class BeverageEvent(BaseModel):
     reaction_summary: Optional[str] = None
     chat_highlights: list[str] = Field(default_factory=list)
     reaction_multiplier: Optional[float] = None
+    sentiment_analysis: Optional[TipSentiment] = None
     alert_message: Optional[str] = None
     alert_audio_url: Optional[str] = None
     card_url: Optional[str] = None
